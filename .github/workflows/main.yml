@@ -22,23 +22,33 @@ jobs:
         run: python -m pip install --upgrade pip requests
 
       - name: Run downloader (python) with curl fallback
+        shell: bash
         run: |
           set -euo pipefail
-          # mkdir -p downloads
-          # try python downloader; if it fails, try curl with browser UA & Referer
-          if python ncfc_download_report_code.py --to downloads; then
+          # Ensure downloads folder exists inside the checked-out repo
+          mkdir -p "${{ github.workspace }}/downloads"
+
+          # Try the Python downloader (explicitly point to repo-root script)
+          if python ncfc_download_report_code.py --to "${{ github.workspace }}/downloads"; then
             echo "Downloaded via python script"
           else
             echo "Python downloader failed; trying curl fallback"
-            OUT="downloads/LatestAgriculturalCondAsses_$(date +%F).pdf"
-            curl -fL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
-                 -e "https://www.ncfc.gov.in/" \
-                 "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" -o "$OUT"
+            OUT="${{ github.workspace }}/downloads/LatestAgriculturalCondAsses_$(date +%F).pdf"
+            # Show headers first to diagnose server response
+            echo "=== curl HEAD (response headers) ==="
+            curl -I -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
+               -e "https://www.ncfc.gov.in/" "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" || true
+            echo "=== curl GET (verbose) ==="
+            curl -v -fL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
+               -e "https://www.ncfc.gov.in/" \
+               "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" -o "$OUT" || true
             ls -lh "$OUT" || true
           fi
 
-      - name: Upload downloaded PDF artifact
+      - name: Upload downloaded PDF and debug HTML
         uses: actions/upload-artifact@v4
         with:
           name: ncfc-report
-          path: downloads/*.pdf
+          path: |
+            downloads/*.pdf
+            downloads/download_error.debug.html
