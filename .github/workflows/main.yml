@@ -18,15 +18,26 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Ensure pip is up-to-date
-        run: python -m pip install --upgrade pip
+      - name: Ensure requests is available
+        run: python -m pip install --upgrade pip requests
 
-      - name: Run downloader script (saves to ./downloads)
+      - name: Run downloader (python) with curl fallback
         run: |
+          set -euo pipefail
           mkdir -p downloads
-          python ncfc_download_report.py --to downloads
+          # try python downloader; if it fails, try curl with browser UA & Referer
+          if python ncfc_download_report.py --to downloads; then
+            echo "Downloaded via python script"
+          else
+            echo "Python downloader failed; trying curl fallback"
+            OUT="downloads/LatestAgriculturalCondAsses_$(date +%F).pdf"
+            curl -fL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
+                 -e "https://www.ncfc.gov.in/" \
+                 "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" -o "$OUT"
+            ls -lh "$OUT" || true
+          fi
 
-      - name: Upload downloaded PDF as artifact
+      - name: Upload downloaded PDF artifact
         uses: actions/upload-artifact@v4
         with:
           name: ncfc-report
