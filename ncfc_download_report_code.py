@@ -34,7 +34,10 @@ BROWSER_HEADERS = {
     ),
     "Accept": "application/pdf,application/octet-stream,application/*;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
     "Referer": "https://www.ncfc.gov.in/",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 
@@ -55,16 +58,29 @@ def save_debug_html(out_dir: str, name: str, body: bytes) -> None:
 def download_with_requests(url: str, out_path: str, headers: dict, timeout: int = 20) -> None:
     import requests
 
+    # Create a session with connection pooling to handle cookies and maintain state
+    session = requests.Session()
+    session.headers.update(headers)
+    
+    # First, visit the parent page to get any cookies
+    try:
+        print(f"Fetching parent page for cookies: https://www.ncfc.gov.in/")
+        home_resp = session.get("https://www.ncfc.gov.in/", timeout=timeout, allow_redirects=True)
+        print(f"Parent page status: {home_resp.status_code}")
+    except Exception as e:
+        print(f"Warning: Could not fetch parent page: {e}", file=sys.stderr)
+
     # HEAD for diagnostics
     try:
-        head = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
+        head = session.head(url, timeout=timeout, allow_redirects=True)
         print(f"HEAD status: {head.status_code}")
         for k, v in head.headers.items():
             print(f"HEAD header: {k}: {v}")
     except Exception as e:
         print(f"HEAD request failed: {e}", file=sys.stderr)
 
-    with requests.get(url, headers=headers, timeout=timeout, stream=True, allow_redirects=True) as r:
+    # Now try to get the PDF
+    with session.get(url, timeout=timeout, stream=True, allow_redirects=True) as r:
         print(f"GET status: {r.status_code}")
         for k, v in r.headers.items():
             print(f"GET header: {k}: {v}")
