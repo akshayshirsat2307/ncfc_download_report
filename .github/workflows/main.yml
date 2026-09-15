@@ -2,8 +2,7 @@ name: Download NCFC daily report
 
 on:
   schedule:
-    # Runs daily at 06:00 UTC
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * *' # daily at 06:00 UTC
   workflow_dispatch: {}
 
 jobs:
@@ -21,31 +20,16 @@ jobs:
       - name: Ensure requests is available
         run: python -m pip install --upgrade pip requests
 
-      - name: Run downloader (python) with curl fallback
+      - name: Run downloader script (creates downloads next to script)
         shell: bash
         run: |
           set -euo pipefail
-          # Ensure downloads folder exists inside the checked-out repo
-          mkdir -p "${{ github.workspace }}/downloads"
+          # run the script located at repo root; pass a relative --to so it is created next to the script
+          python ncfc_download_report_code.py --to downloads || true
+          # show what's in the repo-root downloads folder for debugging
+          ls -la "${{ github.workspace }}/downloads" || true
 
-          # Try the Python downloader (explicitly point to repo-root script)
-          if python ncfc_download_report_code.py --to "${{ github.workspace }}/downloads"; then
-            echo "Downloaded via python script"
-          else
-            echo "Python downloader failed; trying curl fallback"
-            OUT="${{ github.workspace }}/downloads/LatestAgriculturalCondAsses_$(date +%F).pdf"
-            # Show headers first to diagnose server response
-            echo "=== curl HEAD (response headers) ==="
-            curl -I -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
-               -e "https://www.ncfc.gov.in/" "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" || true
-            echo "=== curl GET (verbose) ==="
-            curl -v -fL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" \
-               -e "https://www.ncfc.gov.in/" \
-               "https://www.ncfc.gov.in/downloads/LatestAgriculturalCondAsses.pdf" -o "$OUT" || true
-            ls -lh "$OUT" || true
-          fi
-
-      - name: Upload downloaded PDF and debug HTML
+      - name: Upload downloaded PDF and debug HTML (if present)
         uses: actions/upload-artifact@v4
         with:
           name: ncfc-report
