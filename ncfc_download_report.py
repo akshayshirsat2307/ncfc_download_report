@@ -126,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     today = datetime.date.today()
     filename = make_filename(args.name, today)
     out_path = os.path.join(target_dir, filename)
+    print("Output Path",out_path)
+    print("target_dire",target_dir)
 
     print(f"Downloading {args.url} to {out_path} ...")
     try:
