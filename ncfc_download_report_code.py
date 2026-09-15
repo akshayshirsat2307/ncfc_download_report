@@ -3,16 +3,18 @@
 Downloader for NCFC LatestAgriculturalCondAsses.pdf.
 
 Behavior:
-- When running inside GitHub Actions, defaults to writing downloads into:
-    $GITHUB_WORKSPACE/downloads
-  which is the checked-out repository folder (/home/runner/work/<repo>/<repo>/downloads).
-- When running locally, defaults to ~/Downloads.
-- You may override using --to (absolute or relative paths). Relative paths are resolved against cwd.
+- When a relative --to is provided (for example --to downloads), the path is resolved
+  relative to the script file location (os.path.dirname(__file__)), so the downloads
+  folder will be created next to this script.
+- If --to is absolute, it is used as given.
+- If --to is omitted:
+    - In GitHub Actions: defaults to $GITHUB_WORKSPACE/downloads (repo checkout dir)
+    - Locally: defaults to ~/Downloads
 
 Usage:
-  python ncfc_download_report.py
-  python ncfc_download_report.py --to downloads
-  python ncfc_download_report.py --to /absolute/path
+  python ncfc_download_report_code.py
+  python ncfc_download_report_code.py --to downloads
+  python ncfc_download_report_code.py --to /absolute/path
 """
 from __future__ import annotations
 import argparse
@@ -132,30 +134,33 @@ def resolve_target_dir(requested: str | None) -> str:
     Resolve the requested target directory to an absolute path.
 
     Rules:
+    - If requested is absolute: use it as-is.
+    - If requested is relative: resolve relative to the script's directory (dir of this file).
     - If requested is None:
-        - When running in GitHub Actions and GITHUB_WORKSPACE is set -> use $GITHUB_WORKSPACE/downloads
-        - Otherwise -> use ~/Downloads
-    - If requested is absolute: return it
-    - If requested is relative: resolve against cwd
+        - If running in Actions and GITHUB_WORKSPACE is set -> use $GITHUB_WORKSPACE/downloads
+        - Else -> ~/Downloads
     """
+    if requested is not None and os.path.isabs(requested):
+        return requested
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
     if requested is None:
         if os.environ.get("GITHUB_ACTIONS", "false").lower() == "true":
             github_workspace = os.environ.get("GITHUB_WORKSPACE")
             if github_workspace:
+                # prefer the checked-out workspace downloads
                 return os.path.abspath(os.path.join(github_workspace, "downloads"))
         return os.path.abspath(os.path.expanduser("~/Downloads"))
 
-    if os.path.isabs(requested):
-        return requested
-
-    # relative -> resolve against cwd (workflow runs in $GITHUB_WORKSPACE by default)
-    return os.path.abspath(os.path.join(os.getcwd(), requested))
+    # requested is relative -> place under script directory
+    return os.path.abspath(os.path.join(script_dir, requested))
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     p = argparse.ArgumentParser(description="Download NCFC LatestAgriculturalCondAsses.pdf and save with today's date")
-    p.add_argument("--to", "-t", dest="to", default=None, help="Target directory (default: ~/Downloads or $GITHUB_WORKSPACE/downloads in Actions)")
+    p.add_argument("--to", "-t", dest="to", default=None, help="Target directory (absolute or relative to script location).")
     p.add_argument("--url", dest="url", default=URL_DEFAULT, help="PDF URL (default: NCFC report)")
     p.add_argument("--name", dest="name", default=DEFAULT_NAME, help="Base filename (default: LatestAgriculturalCondAsses)")
     p.add_argument("--retries", dest="retries", type=int, default=2, help="Retries on failure (default 2)")
