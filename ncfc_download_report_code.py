@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """
-Downloader with diagnostics for NCFC LatestAgriculturalCondAsses.pdf.
-Sends browser-like headers, logs server responses, and writes a debug HTML when the server returns an error body.
+Downloader for NCFC LatestAgriculturalCondAsses.pdf.
+
+Behavior:
+- When running inside GitHub Actions, defaults to writing downloads into:
+    $GITHUB_WORKSPACE/downloads
+  which is the checked-out repository folder (/home/runner/work/<repo>/<repo>/downloads).
+- When running locally, defaults to ~/Downloads.
+- You may override using --to (absolute or relative paths). Relative paths are resolved against cwd.
 
 Usage:
-  python scripts/download_report.py --to downloads
+  python ncfc_download_report.py
+  python ncfc_download_report.py --to downloads
+  python ncfc_download_report.py --to /absolute/path
 """
 from __future__ import annotations
 import argparse
@@ -27,8 +35,10 @@ BROWSER_HEADERS = {
     "Referer": "https://www.ncfc.gov.in/",
 }
 
+
 def make_filename(base_name: str, date: datetime.date) -> str:
     return f"{base_name}_{date.isoformat()}.pdf"
+
 
 def save_debug_html(out_dir: str, name: str, body: bytes) -> None:
     path = os.path.join(out_dir, f"{name}.debug.html")
@@ -39,9 +49,11 @@ def save_debug_html(out_dir: str, name: str, body: bytes) -> None:
     except Exception as e:
         print(f"Failed to save debug HTML: {e}", file=sys.stderr)
 
+
 def download_with_requests(url: str, out_path: str, headers: dict, timeout: int = 20) -> None:
     import requests
-    # Do a HEAD first to record server response headers
+
+    # HEAD for diagnostics
     try:
         head = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
         print(f"HEAD status: {head.status_code}")
@@ -55,12 +67,8 @@ def download_with_requests(url: str, out_path: str, headers: dict, timeout: int 
         for k, v in r.headers.items():
             print(f"GET header: {k}: {v}")
         if r.status_code >= 400:
-            # Save response body for debugging
-            try:
-                body = r.content or r.text.encode("utf-8", errors="replace")
-                save_debug_html(os.path.dirname(out_path) or ".", "download_error", body)
-            except Exception as e:
-                print(f"Error saving debug body: {e}", file=sys.stderr)
+            body = r.content or (r.text.encode("utf-8", errors="replace") if hasattr(r, "text") else b"")
+            save_debug_html(os.path.dirname(out_path) or ".", "download_error", body)
             r.raise_for_status()
         tmp = out_path + ".part"
         total = 0
@@ -73,23 +81,32 @@ def download_with_requests(url: str, out_path: str, headers: dict, timeout: int 
             raise RuntimeError("Downloaded file is empty")
         os.replace(tmp, out_path)
 
+
 def download_with_urllib(url: str, out_path: str, headers: dict, timeout: int = 20) -> None:
-    import urllib.request, urllib.error
+    import urllib.request
+    import urllib.error
+
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        status = getattr(resp, "status", None)
-        print(f"urllib GET status: {status}")
-        if status is not None and status >= 400:
-            body = resp.read() or b""
-            save_debug_html(os.path.dirname(out_path) or ".", "download_error", body)
-            raise RuntimeError(f"HTTP error: {status}")
-        data = resp.read()
-        if not data:
-            raise RuntimeError("Downloaded file is empty")
-        tmp = out_path + ".part"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, out_path)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", None)
+            print(f"urllib GET status: {status}")
+            if status is not None and status >= 400:
+                body = resp.read() or b""
+                save_debug_html(os.path.dirname(out_path) or ".", "download_error", body)
+                raise RuntimeError(f"HTTP error: {status}")
+            data = resp.read()
+            if not data:
+                raise RuntimeError("Downloaded file is empty")
+            tmp = out_path + ".part"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, out_path)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"HTTP Error {e.code}: {e.reason}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"URL Error: {e.reason}") from e
+
 
 def download_pdf(url: str, out_path: str, retries: int = 2, backoff: float = 1.5) -> None:
     last_exc = None
@@ -98,7 +115,6 @@ def download_pdf(url: str, out_path: str, retries: int = 2, backoff: float = 1.5
             try:
                 download_with_requests(url, out_path, BROWSER_HEADERS)
             except ModuleNotFoundError:
-                # requests not installed
                 download_with_urllib(url, out_path, BROWSER_HEADERS)
             return
         except Exception as e:
@@ -110,24 +126,47 @@ def download_pdf(url: str, out_path: str, retries: int = 2, backoff: float = 1.5
             else:
                 raise last_exc
 
+
+def resolve_target_dir(requested: str | None) -> str:
+    """
+    Resolve the requested target directory to an absolute path.
+
+    Rules:
+    - If requested is None:
+        - When running in GitHub Actions and GITHUB_WORKSPACE is set -> use $GITHUB_WORKSPACE/downloads
+        - Otherwise -> use ~/Downloads
+    - If requested is absolute: return it
+    - If requested is relative: resolve against cwd
+    """
+    if requested is None:
+        if os.environ.get("GITHUB_ACTIONS", "false").lower() == "true":
+            github_workspace = os.environ.get("GITHUB_WORKSPACE")
+            if github_workspace:
+                return os.path.abspath(os.path.join(github_workspace, "downloads"))
+        return os.path.abspath(os.path.expanduser("~/Downloads"))
+
+    if os.path.isabs(requested):
+        return requested
+
+    # relative -> resolve against cwd (workflow runs in $GITHUB_WORKSPACE by default)
+    return os.path.abspath(os.path.join(os.getcwd(), requested))
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
-    p = argparse.ArgumentParser(description="Download NCFC PDF with diagnostics")
-    p.add_argument("--to", "-t", dest="to", default=None, help="Target directory (default: ~/Downloads)")
-    p.add_argument("--url", dest="url", default=URL_DEFAULT, help="PDF URL")
-    p.add_argument("--name", dest="name", default=DEFAULT_NAME, help="Base filename")
-    p.add_argument("--retries", dest="retries", type=int, default=2, help="Retries (default 2)")
+    p = argparse.ArgumentParser(description="Download NCFC LatestAgriculturalCondAsses.pdf and save with today's date")
+    p.add_argument("--to", "-t", dest="to", default=None, help="Target directory (default: ~/Downloads or $GITHUB_WORKSPACE/downloads in Actions)")
+    p.add_argument("--url", dest="url", default=URL_DEFAULT, help="PDF URL (default: NCFC report)")
+    p.add_argument("--name", dest="name", default=DEFAULT_NAME, help="Base filename (default: LatestAgriculturalCondAsses)")
+    p.add_argument("--retries", dest="retries", type=int, default=2, help="Retries on failure (default 2)")
     args = p.parse_args(argv)
 
-    target_dir = args.to or os.path.expanduser("~/Downloads")
+    target_dir = resolve_target_dir(args.to)
     os.makedirs(target_dir, exist_ok=True)
-    target_dir = os.path.abspath(target_dir)
 
     today = datetime.date.today()
     filename = make_filename(args.name, today)
     out_path = os.path.join(target_dir, filename)
-    print("Output Path",out_path)
-    print("target_dire",target_dir)
 
     print(f"Downloading {args.url} to {out_path} ...")
     try:
@@ -136,13 +175,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Failed to download: {e}", file=sys.stderr)
         return 2
 
-    size = os.path.getsize(out_path)
+    # Basic verification
+    try:
+        size = os.path.getsize(out_path)
+    except OSError:
+        print("Failed to stat downloaded file", file=sys.stderr)
+        return 3
     if size == 0:
         print("Downloaded file is zero bytes", file=sys.stderr)
-        return 3
+        return 4
+
     print(f"Success: saved {out_path} ({size} bytes)")
     return 0
 
+
 if __name__ == "__main__":
-    import argparse
     raise SystemExit(main())
