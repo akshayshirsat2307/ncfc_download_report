@@ -1,1 +1,33 @@
-0 6 * * * /usr/bin/python3 /ncfc_download_report/ncfc_download_report.py >> /ncfc_download_report/ncfc_download_report.log 2>&1
+name: Download NCFC daily report
+
+on:
+  schedule:
+    # Runs daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Ensure pip is up-to-date
+        run: python -m pip install --upgrade pip
+
+      - name: Run downloader script (saves to ./downloads)
+        run: |
+          mkdir -p downloads
+          python scripts/ncfc_download_report.py --to downloads
+
+      - name: Upload downloaded PDF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncfc-report
+          path: downloads/*.pdf
