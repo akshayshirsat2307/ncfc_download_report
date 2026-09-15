@@ -24,7 +24,7 @@ jobs:
       - name: Run downloader (python) with curl fallback
         run: |
           set -euo pipefail
-          mkdir -p downloads
+          # mkdir -p downloads
           # try python downloader; if it fails, try curl with browser UA & Referer
           if python ncfc_download_report_code.py --to downloads; then
             echo "Downloaded via python script"
