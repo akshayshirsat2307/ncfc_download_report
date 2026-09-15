@@ -24,7 +24,7 @@ jobs:
       - name: Run downloader script (saves to ./downloads)
         run: |
           mkdir -p downloads
-          python scripts/ncfc_download_report.py --to downloads
+          python ncfc_download_report.py --to downloads
 
       - name: Upload downloaded PDF as artifact
         uses: actions/upload-artifact@v4
