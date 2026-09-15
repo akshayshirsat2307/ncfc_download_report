@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           mkdir -p downloads
           # try python downloader; if it fails, try curl with browser UA & Referer
-          if python ncfc_download_report.py --to downloads; then
+          if python ncfc_download_report_code.py --to downloads; then
             echo "Downloaded via python script"
           else
             echo "Python downloader failed; trying curl fallback"
