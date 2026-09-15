@@ -1,0 +1,1 @@
+0 6 * * * /usr/bin/python3 /ncfc_download_report/ncfc_download_report.py >> /ncfc_download_report/ncfc_download_report.log 2>&1
