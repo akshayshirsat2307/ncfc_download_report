@@ -27,7 +27,7 @@ jobs:
           # Use absolute path to ensure downloads folder is created in the workspace root
           echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
           echo "Current directory: $(pwd)"
-          python ncfc_download_report_code.py --to "${{ github.workspace }}/downloads" || true
+          python ncfc_download_report_code.py --to "/downloads" || true
           # Show what's in the downloads folder
           echo "=== Checking downloads folder ==="
           ls -la "${{ github.workspace }}/downloads" || echo "Downloads folder not found"
