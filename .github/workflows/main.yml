@@ -20,19 +20,22 @@ jobs:
       - name: Ensure requests is available
         run: python -m pip install --upgrade pip requests
 
-      - name: Run downloader script (creates downloads next to script)
+      - name: Run downloader script
         shell: bash
         run: |
           set -euo pipefail
-          # run the script located at repo root; pass a relative --to so it is created next to the script
-          python ncfc_download_report_code.py --to downloads || true
-          # show what's in the repo-root downloads folder for debugging
-          ls -la "${{ github.workspace }}/downloads" || true
+          # Use absolute path to ensure downloads folder is created in the workspace root
+          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
+          echo "Current directory: $(pwd)"
+          python ncfc_download_report_code.py --to "${{ github.workspace }}/downloads" || true
+          # Show what's in the downloads folder
+          echo "=== Checking downloads folder ==="
+          ls -la "${{ github.workspace }}/downloads" || echo "Downloads folder not found"
 
       - name: Upload downloaded PDF and debug HTML (if present)
         uses: actions/upload-artifact@v4
         with:
           name: ncfc-report
           path: |
-            downloads/*.pdf
-            downloads/download_error.debug.html
+            ${{ github.workspace }}/downloads/*.pdf
+            ${{ github.workspace }}/downloads/download_error.debug.html
