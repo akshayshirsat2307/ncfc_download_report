@@ -24,18 +24,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Use absolute path to ensure downloads folder is created in the workspace root
+          # Run the downloader script - PDF will be saved in the same directory as the script
           echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
           echo "Current directory: $(pwd)"
-          python ncfc_download_report_code.py --to "/downloads" || true
-          # Show what's in the downloads folder
-          echo "=== Checking downloads folder ==="
-          ls -la "${{ github.workspace }}/downloads" || echo "Downloads folder not found"
+          python ncfc_download_report_code.py || true
+          # Show downloaded files in the repository root
+          echo "=== Checking for downloaded PDF ==="
+          ls -la *.pdf || echo "No PDF files found"
+          ls -la *.debug.html || echo "No debug HTML files found"
 
       - name: Upload downloaded PDF and debug HTML (if present)
         uses: actions/upload-artifact@v4
         with:
           name: ncfc-report
           path: |
-            ${{ github.workspace }}/downloads/*.pdf
-            ${{ github.workspace }}/downloads/download_error.debug.html
+            *.pdf
+            *.debug.html
