@@ -6,11 +6,38 @@ import os
 import sys
 import argparse
 import datetime
+import time
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 except Exception:
     requests = None
+
+
+def create_session_with_retries(retries=3, backoff_factor=0.5):
+    """Create a requests session with retry strategy and proper headers."""
+    session = requests.Session()
+    
+    # Configure retry strategy
+    retry_strategy = Retry(
+        total=retries,
+        status_forcelist=[403, 429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        backoff_factor=backoff_factor
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    # Add User-Agent header to mimic browser request
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    })
+    
+    return session
 
 
 def download(url, out_dir):
@@ -21,14 +48,20 @@ def download(url, out_dir):
     filename = f"LatestAgriculturalCondAsses-{today}.pdf"
     path = os.path.join(out_dir, filename)
 
-    # stream the response to avoid loading the whole file into memory
-    with requests.get(url, stream=True, timeout=60) as r:
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-    return path
+    # Create session with retry logic and proper headers
+    session = create_session_with_retries()
+    
+    try:
+        # stream the response to avoid loading the whole file into memory
+        with session.get(url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+        return path
+    finally:
+        session.close()
 
 
 def main():
