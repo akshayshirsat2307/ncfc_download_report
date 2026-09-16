@@ -25,7 +25,9 @@ jobs:
         run: pip install --upgrade pip requests
 
       - name: Run download script
-        run: python scripts/download_pdf.py --out downloads
+        # run: python scripts/download_pdf.py --out downloads
+        run: python ncfc_download_report_code.py --out downloads
+
 
       - name: Upload downloaded PDF(s) as artifact
         uses: actions/upload-artifact@v4
