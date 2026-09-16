@@ -156,21 +156,37 @@ def resolve_target_dir(requested: str | None) -> str:
         - If running in Actions and GITHUB_WORKSPACE is set -> use $GITHUB_WORKSPACE/downloads
         - Else -> ~/Downloads
     """
-    if requested is not None and os.path.isabs(requested):
-        return requested
+    # Debug output
+    print(f"[DEBUG] resolve_target_dir called with requested={requested!r}")
+    
+    # Check if absolute path first
+    if requested is not None:
+        abs_requested = os.path.abspath(os.path.expanduser(requested))
+        print(f"[DEBUG] abs_requested={abs_requested!r}")
+        if os.path.isabs(requested) or (os.path.sep in requested and not requested.startswith('.')):
+            print(f"[DEBUG] Treating as absolute path: {abs_requested}")
+            return abs_requested
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    print(f"[DEBUG] script_dir={script_dir!r}")
 
     if requested is None:
         if os.environ.get("GITHUB_ACTIONS", "false").lower() == "true":
             github_workspace = os.environ.get("GITHUB_WORKSPACE")
+            print(f"[DEBUG] In GitHub Actions, GITHUB_WORKSPACE={github_workspace!r}")
             if github_workspace:
                 # prefer the checked-out workspace downloads
-                return os.path.abspath(os.path.join(github_workspace, "downloads"))
-        return os.path.abspath(os.path.expanduser("~/Downloads"))
+                result = os.path.abspath(os.path.join(github_workspace, "downloads"))
+                print(f"[DEBUG] Returning workspace path: {result}")
+                return result
+        result = os.path.abspath(os.path.expanduser("~/Downloads"))
+        print(f"[DEBUG] Returning home Downloads path: {result}")
+        return result
 
     # requested is relative -> place under script directory
-    return os.path.abspath(os.path.join(script_dir, requested))
+    result = os.path.abspath(os.path.join(script_dir, requested))
+    print(f"[DEBUG] Treating as relative path, returning: {result}")
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -182,7 +198,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--retries", dest="retries", type=int, default=2, help="Retries on failure (default 2)")
     args = p.parse_args(argv)
 
+    print(f"[DEBUG] Script started with args: {args}")
+    
     target_dir = resolve_target_dir(args.to)
+    print(f"[DEBUG] Final target_dir: {target_dir}")
     os.makedirs(target_dir, exist_ok=True)
 
     today = datetime.date.today()
