@@ -1,15 +1,19 @@
-name: Download NCFC daily report
+name: Download NCFC PDF Daily
 
+# Only run on a daily schedule or manually (prevents push loops if you commit files)
 on:
   schedule:
-    - cron: '0 6 * * *' # daily at 06:00 UTC
-  workflow_dispatch: {}
+    - cron: '0 0 * * *'   # daily at 00:00 UTC
+  workflow_dispatch:      # manual run from Actions tab
+
+permissions:
+  contents: read
 
 jobs:
   download:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -17,26 +21,14 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Ensure requests is available
-        run: python -m pip install --upgrade pip requests
+      - name: Install dependencies
+        run: pip install --upgrade pip requests
 
-      - name: Run downloader script
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Run the downloader script - PDF will be saved in the same directory as the script
-          echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
-          echo "Current directory: $(pwd)"
-          python ncfc_download_report_code.py || true
-          # Show downloaded files in the repository root
-          echo "=== Checking for downloaded PDF ==="
-          ls -la *.pdf || echo "No PDF files found"
-          ls -la *.debug.html || echo "No debug HTML files found"
+      - name: Run download script
+        run: python scripts/download_pdf.py --out downloads
 
-      - name: Upload downloaded PDF and debug HTML (if present)
+      - name: Upload downloaded PDF(s) as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ncfc-report
-          path: |
-            *.pdf
-            *.debug.html
+          name: ncfc-pdfs
+          path: downloads/*.pdf
